@@ -97,11 +97,11 @@
         $Ansible.Changed = $false
 
         $userCert = Get-Item -LiteralPath "Cert:\LocalMachine\TrustedPeople\$Thumbprint"
+        $subject = $userCert.GetNameInfo('UpnName', $false)  # SAN userPrincipalName
 
         $certChain = New-Object -TypeName Security.Cryptography.X509Certificates.X509Chain
         [void]$certChain.Build($userCert)
         $caThumbprint = $certChain.ChainElements.Certificate[-1].Thumbprint
-        $subject = "$($Credential.UserName)@localhost2"
 
         $mappings = Get-ChildItem -LiteralPath WSMan:\localhost\ClientCertificate |
             Where-Object {

@@ -58,11 +58,11 @@ finally {
     $trustedPeopleStore.Dispose()
 }
 
-# Get username and generate our password
-# We use RandomNumberGenerator as New-Guid has no guarantees it
-# uses an RNG to generate the bytes. This is still not ideal but
-# works for our example purposes here.
-$userName = $clientCertObj.Subject.Substring(3)
+# Get username and generate our password.
+# We use RandomNumberGenerator as the Guid type has no guarantees it uses an
+# RNG to generate the bytes. This is still not ideal but works for our example
+# purposes here.
+$userName = $clientCertObj.Subject.Substring(3)  # Removes the 'CN=' prefix
 $rng = [RandomNumberGenerator]::Create()
 try {
     $guidBytes = [byte[]]::new(16)
@@ -85,7 +85,7 @@ New-LocalUser @createUserParams | Add-LocalGroupMember -Group Administrators
 
 $certMapping = @{
     Path = 'WSMan:\localhost\ClientCertificate'
-    Subject = "$($createUserParams.Name)@localhost"
+    Subject = $clientCertObj.GetNameInfo('UpnName', $false)
     Issuer = $caCertObj.Thumbprint
     Credential = [PSCredential]::new($createUserParams.Name, $createUserParams.Password)
     Force = $true

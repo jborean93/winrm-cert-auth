@@ -1,5 +1,6 @@
 # WinRM Client Certificate Authentication
-This repo demonstrates how to create certificates for WinRM client certificate authentication and how to configure Windows to setup the service side to allow those certificates for client authentication.
+This repo demonstrates how to create certificates for WinRM/WSMan client certificate authentication and how to configure Windows to setup the service side to allow those certificates for client authentication.
+It has some Ansible playbooks that can be used to do all the necessary steps plus some standalone scripts and background information to help you understand how certificate authentication works and is configured.
 
 ## Background
 WinRM authentication is typically done through the `Negotiate` protocol which attempts to use `Kerberos` authentication before falling back to `NTLM`.
@@ -11,6 +12,7 @@ Please keep in that certificate authentication does have its downsides such as:
 
 + it can only be mapped to a local Windows user, no domain accounts
 + the username and password must be mapped to the certificate, if the password changes, the cert will need to be re-mapped
++ an administrator on the Windows host can retrieve the local user password through the certificate mapping
 + the HTTP libraries used by `psrp` and `winrm` do not support
   + encrypted private keys, they must be stored without encryption
   + certs and private keys stored as a var, they must be a file
@@ -102,11 +104,12 @@ When the client attempts to use certificate authentication with WinRM it:
 The server does the following checks based on the certificate provided by the client (there might be more checks I am missing):
 
 + the certificate is issued by a trusted Certificate Authority (CA)
+    + if self signed, the cert must be trusted as a root CA
 + the certificate has an Extended Key Usage (EKU) of `clientAuth` (`1.3.6.1.5.5.7.3.2`)
 + the certificate itself is stored in the `LocalMachine` `TrustedPeople` certificate store
 + the Subject Alternative Name (SAN) contains an `otherName` entry for `userPrincipalName` (`1.3.6.1.4.1.311.20.2.3`) (typically with the value `username@localhost`)
-+ the SAN value above is stored in the `WSMan:\localhost\ClientCertificate` mappings
-+ the username/password under the mapping above is a valid local user and the and the user can be logged in with the password
++ a `WSMan:\localhost\ClientCertificate` mapping has a `Subject` with the same SAN value from the above
++ the username/password registered for the mapping above is a valid local user and the and the user can be logged in with the password
 + the standard authorization checks done by WinRM for the above user (Administrator, allowed to log onto network, not disabled, etc)
 
 If any of the above checks fail the authentication fails.
@@ -123,11 +126,9 @@ The first step is to generate a CA certificate which will be used to issue our c
 > It is recommened to use a proper CA that is trusted in your environment, for example one issued by Active Directory Certificate Services (ADCS).
 
 Once we have a CA we can then generate a client certificate and key that is issued/signed by our CA key.
-The client certificate must have the following:
-
-+ subject is set to `CN=username` where `username` is the name of the local Windows user we are mapping the cert to
-+ eku with `clientAuth`
-+ san with an `otherName` entry for `userPrincipalName` set to `username@localhost` where `username` is the name of the local user we are mapping the cert to
+The client certificate *MUST* have an EKU with `clientAuth` set and a SAN with an `otherName` value for a `userPrincipalName`.
+The certificate *SHOULD* set the subject to `CN=username` and the SAN `userPrincipalName` to `username@localhost` where the `username` is the local user we are mapping the cert to.
+While the subject and SAN should have these values they are not strictly necessary, the subject is not used and the SAN `userPrincipalName` is the value used in the WSMan mapping.
 
 The following scripts can be used to generate the CA and client certificates
 
@@ -136,7 +137,7 @@ The following scripts can be used to generate the CA and client certificates
 + [powershell 7+ - generate_certs_pwsh.ps1](./scripts/generate_certs_pwsh.ps1) -  PowerShell 7+ Windows/Linux/macOS
 + [python - generate_certs_python.py](./scripts/generate_certs_python.py) - Requires the `cryptography` Python package
 
-Once generate, Ansible requires the public cert and private key in the PEM format as separate files.
+Once generated, Ansible requires the public cert and private key in the PEM format as separate files.
 The private key cannot be encrypted due to a limitation in the underlying libraries that Ansible uses.
 
 If you are wanting to use certificate auth from a Windows client with PowerShell then Windows must have access to the private key.
@@ -164,13 +165,17 @@ From there we can use the `-CertificateThumbprint $thumbprint` parameter on cmdl
 
 ### Windows Configuration
 Once the certificates have been generated we need to configure Windows to use those certificates.
-This step needs to do the following:
+The following things must be done on Windows to configure the certificate authentication:
 
 + trust the CA that issued our client certificate
   + if using a self signed client certificate this will be the client certificate itself
 + trust the client certificate as a `TrustedPeople` cert
 + create the local user
-+ maps the local user's credentials to the CA thumbprint that issued the client certificate
++ creates a wsman certificate mapping entry that
+  + sets the `Subject` to the SAN `userPrincipalName` entry of our client certificate
+  + sets the `Uri` to `*`
+  + sets the `Issuer` to the root CA thumbprint that issued our client certificate
+  + provides the username/password of the local user to map the certificate toß
 + enabled the Certificate authentication option on the WSMan service
 
 The playbook [setup_windows.yml](./setup_windows.yml) is designed to do all this as part of the Ansible run but if you wish to do this manually through PowerShell you can use [setup_windows.ps1](./scripts/setup_windows.ps1) instead.
@@ -187,7 +192,7 @@ The password for the user is not needed for anything but will be randomly genera
 
 ### Reset Changes
 The PowerShell script [reset_windows.ps1](./scripts/reset_windows.ps1) can be run to undo the Windows configuration done by the playbook.
-This script will disable cert auth, remove any certificates imported by the steps above, delete the local user, and remove all WSMan certificate mappings.
+This script will disable cert auth, remove any WSMan certificate mappings, delete the local user for each mapping, and remove the imported certifices.
 
 > [!WARNING]
 > Do not run this script if you have certificate authentication configured for any other users, it is designed to bring the WinRM service back to the factory state when it comes to certificate authentication make by this example repo.
