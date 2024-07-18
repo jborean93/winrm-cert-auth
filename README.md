@@ -134,7 +134,7 @@ The following scripts can be used to generate the CA and client certificates:
 
 + [bash - generate_certs_openssl.sh](./scripts/generate_certs_openssl.sh) - Requires OpenSSL
 + [powershell - generate_certs_powershell.ps1](./scripts/generate_certs_powershell.ps1) - Windows Only 5.1/7+
-+ [powershell 7+ - generate_certs_pwsh.ps1](./scripts/generate_certs_pwsh.ps1) -  PowerShell 7+ Windows/Linux/macOS
++ [powershell 7+ - generate_certs_pwsh.ps1](./scripts/generate_certs_pwsh.ps1) -  PowerShell 7.3+ Windows/Linux/macOS
 + [python - generate_certs_python.py](./scripts/generate_certs_python.py) - Requires the `cryptography` Python package
 
 All these scripts require the username to be provided as the first argument.
