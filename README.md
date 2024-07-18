@@ -137,6 +137,15 @@ The following scripts can be used to generate the CA and client certificates:
 + [powershell 7+ - generate_certs_pwsh.ps1](./scripts/generate_certs_pwsh.ps1) -  PowerShell 7.3+ Windows/Linux/macOS
 + [python - generate_certs_python.py](./scripts/generate_certs_python.py) - Requires the `cryptography` Python package
 
+> [!NOTE]
+> The PowerShell 5.1 script cannot generate PEM encoded private keys needed by Ansible.
+> It will instead generate the public cert `*.pem` and a PKCS12 `*.pfx` file.
+> Use the `openssl` commands below to extract the private key as a PEM file for use in Ansible.
+
+```bash
+openssl pkcs12 -in client_cert.pfx -nocert -nodes -out client_cert_no_pass.key -passin "pass:$(<cert_password)"
+```
+
 All these scripts require the username to be provided as the first argument.
 This **SHOULD** match the username being created on the Windows host but it is not a hard requirement.
 
@@ -144,11 +153,27 @@ Once generated, Ansible requires the public cert and private key in the PEM form
 The private key cannot be encrypted due to a limitation in the underlying libraries that Ansible uses.
 
 If you are wanting to use certificate auth from a Windows client with PowerShell then Windows must have access to the private key.
-The simplest way to do this is to convert the cert and key into a PKCS12/pfx file and import it into Windows with.
-To convert the separate cert and key into a PFX we can use OpenSSL
+The simplest way to do this is to convert the cert and key into a PKCS12/pfx file and import it into Windows.
+To convert the separate cert and key into a PFX for use in Windows, we can use OpenSSL:
 
 ```bash
+openssl pkcs12 -export -out cert.pfx -inkey cert.key -in cert.pem
+```
 
+> [!NOTE]
+> Newer OpenSSL versions export a PFX using AES encryption.
+> Windows Server 2016 or older will fail to import these certificate types with an incorrect password error.
+> To create a PFX file using the older 3DES encryption you can use the following command
+
+```bash
+openssl pkcs12 \
+    -export \
+    -certpbe PBE-SHA1-3DES \
+    -keypbe PBE-SHA1-3DES \
+    -macalg SHA1 \
+    -out cert.pfx \
+    -inkey cert.key \
+    -in cert.pem
 ```
 
 Once we have a pfx file we can import that into Windows with:
@@ -157,7 +182,7 @@ Once we have a pfx file we can import that into Windows with:
 $pfxPass = Read-Host -Prompt "Enter the pfx password" -AsSecureString
 $importParams = @{
     CertStoreLocation = 'Cert:\CurrentUser\My'
-    FilePath = '...'  # Replace with the path to the pfx generated above
+    FilePath = 'cert.pfx'  # Replace with the path to the pfx generated above
     Password = $pfxPass
 }
 $cert = Import-PfxCertificate @importParams
