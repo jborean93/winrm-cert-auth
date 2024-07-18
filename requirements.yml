@@ -1,0 +1,4 @@
+collections:
+- name: ansible.windows
+  version: '>=2.4.0'  # sensitive_parameters in ansible.windows.win_powershell
+- name: community.crypto

@@ -1,0 +1,29 @@
+[windows:children]
+psrp
+winrm
+
+[psrp]
+{% for host in ansible_play_hosts_all %}
+{{ inventory_hostname }}-psrp  ansible_host={{ hostvars[host]['ansible_host'] | default(inventory_hostname) }}
+{% endfor %}
+
+[psrp:vars]
+ansible_connection=psrp
+ansible_port=5986
+ansible_psrp_auth=certificate
+ansible_psrp_cert_validation=ignore
+ansible_psrp_certificate_pem=cert/client_cert.pem
+ansible_psrp_certificate_key_pem=cert/client_cert_no_pass.key
+
+[winrm]
+{% for host in ansible_play_hosts_all %}
+{{ inventory_hostname }}-winrm  ansible_host={{ hostvars[host]['ansible_host'] | default(inventory_hostname) }}
+{% endfor %}
+
+[winrm:vars]
+ansible_connection=winrm
+ansible_port=5986
+ansible_winrm_transport=certificate
+ansible_winrm_server_cert_validation=ignore
+ansible_winrm_cert_pem=cert/client_cert.pem
+ansible_winrm_cert_key_pem=cert/client_cert_no_pass.key

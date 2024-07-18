@@ -1,0 +1,90 @@
+- name: Setup Certificates
+  hosts: localhost
+  gather_facts: false
+  tasks:
+  - name: Verify required facts are setup
+    assert:
+      that:
+      - username is defined
+
+  - name: Create certificate output dir
+    ansible.builtin.file:
+      path: '{{ playbook_dir }}/cert'
+      state: directory
+
+  - name: Generate certificate key password
+    ansible.builtin.set_fact:
+      certificate_password: "{{ lookup('ansible.builtin.password', playbook_dir ~ '/cert/cert_password', length=15) }}"
+
+  - name: Create CA private key
+    community.crypto.openssl_privatekey:
+      path: '{{ playbook_dir }}/cert/ca.key'
+      passphrase: "{{ certificate_password }}"
+      cipher: auto
+
+  - name: Create CA CSR
+    community.crypto.openssl_csr_pipe:
+      privatekey_path: '{{ playbook_dir }}/cert/ca.key'
+      privatekey_passphrase: "{{ certificate_password }}"
+      common_name: WinRM Cert Auth CA
+      use_common_name_for_san: false
+      basic_constraints:
+      - 'CA:TRUE'
+      basic_constraints_critical: true
+      key_usage:
+      - keyCertSign
+      key_usage_critical: true
+    register: ca_csr
+    changed_when: false
+
+  - name: Create CA certificate from CSR
+    community.crypto.x509_certificate:
+      path: '{{ playbook_dir }}/cert/ca.pem'
+      csr_content: "{{ ca_csr.csr }}"
+      privatekey_path: '{{ playbook_dir }}/cert/ca.key'
+      privatekey_passphrase: "{{ certificate_password }}"
+      provider: selfsigned
+
+  - name: Create Client certificate private key
+    community.crypto.openssl_privatekey:
+      path: '{{ playbook_dir }}/cert/client_cert.key'
+      passphrase: '{{ certificate_password }}'
+      cipher: auto
+
+  - name: Create Client certificate CSR
+    community.crypto.openssl_csr_pipe:
+      privatekey_path: '{{ playbook_dir }}/cert/client_cert.key'
+      privatekey_passphrase: '{{ certificate_password }}'
+      common_name: '{{ username }}'
+      extended_key_usage:
+      - clientAuth
+      subject_alt_name: otherName:1.3.6.1.4.1.311.20.2.3;UTF8:{{ username }}@localhost2
+    register: cert_auth_csr
+    changed_when: false
+
+  - name: Create Client certificate from CSR
+    community.crypto.x509_certificate:
+      path: '{{ playbook_dir }}/cert/client_cert.pem'
+      csr_content: "{{ cert_auth_csr.csr }}"
+      provider: ownca
+      ownca_path: '{{ playbook_dir }}/cert/ca.pem'
+      ownca_privatekey_path: '{{ playbook_dir }}/cert/ca.key'
+      ownca_privatekey_passphrase: "{{ certificate_password }}"
+      ownca_not_after: +365d
+      ownca_not_before: '-1d'
+
+  - name: Strip passphrase from client certificate key
+    ansible.builtin.command:
+      cmd: >-
+        openssl rsa
+        -in client_cert.key
+        -out client_cert_no_pass.key
+        -passin pass:{{ certificate_password }}
+      chdir: '{{ playbook_dir }}/cert'
+      creates: '{{ playbook_dir }}/cert/client_cert_no_pass.key'
+
+  - name: Output summary
+    ansible.builtin.debug:
+      msg: >-
+        CA and Client Certificate has been generated at '{{ playbook_dir }}/cert'.
+        The password for both private keys is '{{ certificate_password }}'.
