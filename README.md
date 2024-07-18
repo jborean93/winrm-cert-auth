@@ -130,12 +130,15 @@ The client certificate *MUST* have an EKU with `clientAuth` set and a SAN with a
 The certificate *SHOULD* set the subject to `CN=username` and the SAN `userPrincipalName` to `username@localhost` where the `username` is the local user we are mapping the cert to.
 While the subject and SAN should have these values they are not strictly necessary, the subject is not used and the SAN `userPrincipalName` is the value used in the WSMan mapping.
 
-The following scripts can be used to generate the CA and client certificates
+The following scripts can be used to generate the CA and client certificates:
 
 + [bash - generate_certs_openssl.sh](./scripts/generate_certs_openssl.sh) - Requires OpenSSL
 + [powershell - generate_certs_powershell.ps1](./scripts/generate_certs_powershell.ps1) - Windows Only 5.1/7+
 + [powershell 7+ - generate_certs_pwsh.ps1](./scripts/generate_certs_pwsh.ps1) -  PowerShell 7+ Windows/Linux/macOS
 + [python - generate_certs_python.py](./scripts/generate_certs_python.py) - Requires the `cryptography` Python package
+
+All these scripts require the username to be provided as the first argument.
+This **SHOULD** match the username being created on the Windows host but it is not a hard requirement.
 
 Once generated, Ansible requires the public cert and private key in the PEM format as separate files.
 The private key cannot be encrypted due to a limitation in the underlying libraries that Ansible uses.
